@@ -171,6 +171,9 @@ module Discourse
     require 'middleware/discourse_public_exceptions'
     config.exceptions_app = Middleware::DiscoursePublicExceptions.new(Rails.public_path)
 
+    require 'middleware/cookies_rotator'
+    config.middleware.insert_before ActionDispatch::Cookies, Middleware::CookiesRotator
+
     # Our templates shouldn't start with 'discourse/app/templates'
     config.handlebars.templates_root = {
       'discourse/app/templates' => '',
