@@ -68,12 +68,20 @@ class Site
     # Do note that any new association added to the eager loading needs a
     # corresponding ActiveRecord callback to clear the categories cache.
     Discourse.cache.fetch(categories_cache_key, expires_in: 30.minutes) do
-      categories = Category
-        .includes(:uploaded_logo, :uploaded_logo_dark, :uploaded_background, :tags, :tag_groups, category_required_tag_groups: :tag_group)
-        .joins('LEFT JOIN topics t on t.id = categories.topic_id')
-        .select('categories.*, t.slug topic_slug')
-        .order(:position)
-        .to_a
+      categories = begin
+        query = Category
+          .includes(:uploaded_logo, :uploaded_logo_dark, :uploaded_background, :tags, :tag_groups, category_required_tag_groups: :tag_group)
+          .joins('LEFT JOIN topics t on t.id = categories.topic_id')
+          .select('categories.*, t.slug topic_slug')
+          .order(:position)
+
+        modifiers = []
+        # some plugins may need to change the categories cached on site load
+        DiscourseEvent.trigger(:site_query_categories, modifiers, query, @guardian)
+        modifiers.each { |mod|  query = mod.call(query) }
+
+        query.to_a
+      end
 
       if preloaded_category_custom_fields.present?
         Category.preload_custom_fields(
@@ -142,9 +150,16 @@ class Site
   end
 
   def groups
-    Group
+    query = Group
       .visible_groups(@guardian.user, "name ASC", include_everyone: true)
       .includes(:flair_upload)
+
+    modifiers = []
+    # some plugins may need to change the groups loaded with the site
+    DiscourseEvent.trigger(:site_query_groups, modifiers, query, @guardian)
+    modifiers.each { |mod|  query = mod.call(query) }
+
+    query
   end
 
   def archetypes
